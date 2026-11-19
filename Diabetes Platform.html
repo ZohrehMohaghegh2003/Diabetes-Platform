@@ -1,0 +1,705 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NEURO-DIAB | سیستم تشخیص هوشمند</title>
+<link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@300;400;600;700;900&family=Orbitron:wght@500;700;900&display=swap" rel="stylesheet">
+<style>
+  *{margin:0;padding:0;box-sizing:border-box;font-family:'Vazirmatn',sans-serif}
+
+  :root{
+    --cyan:#00f0ff;
+    --purple:#a855f7;
+    --pink:#ff006e;
+    --dark:#05050a;
+    --panel:rgba(10,12,24,0.72);
+  }
+
+  body{
+    min-height:100vh;
+    background:var(--dark);
+    display:flex;align-items:center;justify-content:center;
+    padding:24px;
+    overflow-x:hidden;
+    position:relative;
+  }
+
+  /* ===== گرید متحرک پس‌زمینه ===== */
+  .grid-bg{
+    position:fixed;inset:0;z-index:0;
+    background-image:
+      linear-gradient(rgba(0,240,255,0.06) 1px,transparent 1px),
+      linear-gradient(90deg,rgba(0,240,255,0.06) 1px,transparent 1px);
+    background-size:50px 50px;
+    animation:gridMove 20s linear infinite;
+    mask-image:radial-gradient(circle at center,#000 20%,transparent 75%);
+    -webkit-mask-image:radial-gradient(circle at center,#000 20%,transparent 75%);
+  }
+  @keyframes gridMove{to{background-position:50px 50px}}
+
+  /* ===== خطوط اسکن ===== */
+  .scanlines{
+    position:fixed;inset:0;z-index:1;pointer-events:none;
+    background:repeating-linear-gradient(0deg,rgba(0,240,255,0.03) 0px,rgba(0,240,255,0.03) 1px,transparent 1px,transparent 4px);
+    animation:scanFlicker 8s linear infinite;
+  }
+  @keyframes scanFlicker{0%,100%{opacity:.6}50%{opacity:1}}
+
+  /* ذرات canvas */
+  #particles{position:fixed;inset:0;z-index:0;pointer-events:none}
+
+  /* ===== کانتینر اصلی ===== */
+  .hud{
+    position:relative;z-index:2;
+    width:100%;max-width:600px;
+    background:var(--panel);
+    backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);
+    border:1px solid rgba(0,240,255,0.25);
+    border-radius:6px;
+    padding:0;
+    box-shadow:
+      0 0 60px rgba(0,240,255,0.15),
+      0 0 120px rgba(168,85,247,0.1),
+      inset 0 0 60px rgba(0,240,255,0.03);
+    animation:bootUp .8s cubic-bezier(.16,1,.3,1);
+    overflow:hidden;
+  }
+  @keyframes bootUp{from{opacity:0;transform:scale(.95) translateY(20px)}to{opacity:1;transform:none}}
+
+  /* ===== هدر ===== */
+  .hud-header{
+    padding:28px 32px 24px;
+    border-bottom:1px solid rgba(0,240,255,0.12);
+    position:relative;
+    background:linear-gradient(180deg,rgba(0,240,255,0.05),transparent);
+  }
+  .hud-header::after{
+    content:'';position:absolute;bottom:-1px;left:0;height:1px;width:100%;
+    background:linear-gradient(90deg,transparent,var(--cyan),transparent);
+    animation:headerScan 3s ease-in-out infinite;
+  }
+  @keyframes headerScan{0%,100%{opacity:.3}50%{opacity:1}}
+
+  .top-bar{
+    display:flex;align-items:center;justify-content:space-between;
+    margin-bottom:18px;
+  }
+  .status-dot{
+    display:flex;align-items:center;gap:8px;
+    font-family:'Orbitron',sans-serif;font-size:10px;letter-spacing:2px;
+    color:var(--cyan);
+  }
+  .status-dot span{
+    width:8px;height:8px;border-radius:50%;background:var(--cyan);
+    box-shadow:0 0 10px var(--cyan);animation:blink 1.2s infinite;
+  }
+  @keyframes blink{0%,100%{opacity:1}50%{opacity:.2}}
+
+  .version{
+    font-family:'Orbitron',sans-serif;font-size:10px;letter-spacing:2px;
+    color:rgba(45, 110, 207, 0.8);
+    border:1px solid rgba(81, 52, 247, 0.3);
+    padding:3px 10px;border-radius:3px;
+  }
+
+  .logo-row{display:flex;align-items:center;gap:16px}
+
+  .logo{
+    width:60px;height:60px;flex-shrink:0;
+    position:relative;display:grid;place-items:center;
+    background:radial-gradient(circle,rgba(0,240,255,.15),transparent 70%);
+    border:1.5px solid var(--cyan);border-radius:50%;
+    box-shadow:0 0 25px rgba(0,240,255,.4),inset 0 0 20px rgba(0,240,255,.2);
+    font-size:28px;
+    animation:logoPulse 3s ease-in-out infinite;
+  }
+  .logo::before{
+    content:'';position:absolute;inset:-8px;border-radius:50%;
+    border:1px dashed rgba(0,240,255,.4);
+    animation:spin 8s linear infinite;
+  }
+  @keyframes spin{to{transform:rotate(360deg)}}
+  @keyframes logoPulse{0%,100%{box-shadow:0 0 25px rgba(0,240,255,.4),inset 0 0 20px rgba(0,240,255,.2)}50%{box-shadow:0 0 45px rgba(0,240,255,.7),inset 0 0 30px rgba(0,240,255,.35)}}
+
+  h1{
+    font-family:'Orbitron',sans-serif;
+    font-size:24px;font-weight:900;letter-spacing:1px;
+    color:#fff;
+    text-shadow:0 0 20px rgba(0,240,255,.6),0 0 40px rgba(0,240,255,.3);
+  }
+  h1 .accent{color:var(--cyan)}
+  .subtitle{
+    font-size:12px;color:rgba(255,255,255,.5);
+    margin-top:4px;letter-spacing:.5px;
+  }
+
+  /* ===== بدنه فرم ===== */
+  .hud-body{padding:28px 32px 32px}
+
+  .section-label{
+    font-family:'Orbitron',sans-serif;font-size:15px;letter-spacing:3px;
+    color:var(--cyan);margin-bottom:18px;
+    display:flex;align-items:center;gap:10px;
+    text-transform:uppercase;
+  }
+  .section-label::after{
+    content:'';flex:1;height:1px;
+    background:linear-gradient(90deg,rgba(0,240,255,.4),transparent);
+  }
+
+  .field{
+    margin-bottom:18px;
+    position:relative;
+    animation:fieldIn .5s ease backwards;
+  }
+  .field:nth-child(1){animation-delay:.1s}
+  .field:nth-child(2){animation-delay:.2s}
+  .field:nth-child(3){animation-delay:.3s}
+  .field:nth-child(4){animation-delay:.4s}
+  @keyframes fieldIn{from{opacity:0;transform:translateX(24px)}to{opacity:1;transform:none}}
+
+  .field-label{
+    display:flex;align-items:center;justify-content:space-between;
+    margin-bottom:9px;
+  }
+  .field-label .name{
+    font-size:13px;font-weight:600;color:#cbd5e1;
+    display:flex;align-items:center;gap:8px;
+  }
+  .field-label .name i{
+    width:6px;height:6px;background:var(--cyan);
+    transform:rotate(45deg);box-shadow:0 0 8px var(--cyan);
+  }
+  .field-label .unit{
+    font-family:'Orbitron',sans-serif;font-size:9px;letter-spacing:1px;
+    color:rgba(168,85,247,.7);
+  }
+
+  .input-wrap{position:relative}
+  .input-wrap::before{
+    content:'';position:absolute;right:0;top:0;bottom:0;width:2px;
+    background:linear-gradient(180deg,var(--cyan),var(--purple));
+    opacity:0;transition:.3s;
+  }
+  .input-wrap:focus-within::before{opacity:1;box-shadow:0 0 15px var(--cyan)}
+
+  input[type=number]{
+    width:100%;
+    background:rgba(0,0,0,.4);
+    border:1px solid rgba(0,240,255,.15);
+    border-radius:4px;
+    padding:13px 16px;
+    color:#fff;
+    font-size:17px;font-weight:600;
+    font-family:'Orbitron',sans-serif;
+    letter-spacing:1px;
+    outline:none;
+    transition:.3s;
+  }
+  input[type=number]:focus{
+    border-color:var(--cyan);
+    box-shadow:0 0 0 3px rgba(0,240,255,.1),0 0 20px rgba(0,240,255,.2);
+    background:rgba(0,240,255,.03);
+  }
+  input[type=number]::placeholder{
+    color:rgba(255,255,255,.2);
+    font-family:'Vazirmatn',sans-serif;
+    font-weight:400;letter-spacing:0;
+  }
+  input[type=number]::-webkit-outer-spin-button,
+  input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+  input[type=number]{-moz-appearance:textfield}
+
+  /* ===== اعتبارسنجی زنده ===== */
+  .input-error{
+    border-color:var(--pink) !important;
+    box-shadow:0 0 0 3px rgba(255,0,110,.1),0 0 20px rgba(255,0,110,.2) !important;
+  }
+  .input-valid{
+    border-color:rgba(0,255,150,.5) !important;
+    box-shadow:0 0 0 3px rgba(0,255,150,.08) !important;
+  }
+  .field-hint{
+    display:none;
+    font-size:10px;
+    color:rgba(255,0,110,.85);
+    margin-top:6px;
+    padding-right:4px;
+  }
+  .field-hint.show{display:block}
+  .field-hint .ok{color:rgba(0,255,150,.85)}
+
+  /* ===== دکمه ===== */
+  .btn-submit{
+    width:100%;margin-top:10px;
+    padding:17px;
+    position:relative;
+    background:linear-gradient(135deg,rgba(0,240,255,.15),rgba(168,85,247,.15));
+    border:1.5px solid var(--cyan);
+    border-radius:4px;
+    color:#fff;
+    font-family:'Orbitron',sans-serif;
+    font-size:15px;font-weight:700;letter-spacing:3px;
+    cursor:pointer;
+    overflow:hidden;
+    transition:.35s;
+    box-shadow:0 0 25px rgba(0,240,255,.2),inset 0 0 20px rgba(0,240,255,.05);
+  }
+  .btn-submit::before{
+    content:'';position:absolute;inset:0;
+    background:linear-gradient(90deg,transparent,rgba(0,240,255,.4),transparent);
+    transform:translateX(-100%);
+    transition:.6s;
+  }
+  .btn-submit:hover::before{transform:translateX(100%)}
+  .btn-submit:hover{
+    border-color:#fff;
+    box-shadow:0 0 40px rgba(0,240,255,.6),inset 0 0 30px rgba(0,240,255,.15);
+    transform:translateY(-2px);
+  }
+  .btn-submit:active{transform:translateY(0) scale(.99)}
+  .btn-submit:disabled{opacity:.6;cursor:wait;transform:none}
+
+  /* ===== نتیجه ===== */
+  .result{
+    margin-top:24px;
+    border-radius:4px;
+    padding:0;
+    max-height:0;overflow:hidden;opacity:0;
+    transition:all .6s cubic-bezier(.16,1,.3,1);
+  }
+  .result.show{max-height:400px;opacity:1;padding:24px}
+
+  .result.result-safe{
+    background:linear-gradient(135deg,rgba(0,255,150,.08),rgba(0,240,255,.05));
+    border:1px solid rgba(0,255,150,.4);
+    box-shadow:0 0 30px rgba(0,255,150,.15),inset 0 0 30px rgba(0,255,150,.03);
+  }
+  .result.result-danger{
+    background:linear-gradient(135deg,rgba(255,0,110,.1),rgba(168,85,247,.05));
+    border:1px solid rgba(255,0,110,.5);
+    box-shadow:0 0 30px rgba(255,0,110,.2),inset 0 0 30px rgba(255,0,110,.05);
+  }
+
+  .result-inner{display:flex;align-items:center;gap:20px}
+
+  /* گیج دایره‌ای */
+  .gauge{
+    width:90px;height:90px;flex-shrink:0;position:relative;
+  }
+  .gauge svg{transform:rotate(-90deg)}
+  .gauge .track{stroke:rgba(255,255,255,.08)}
+  .gauge .bar{
+    stroke-linecap:round;
+    transition:stroke-dashoffset 1.2s cubic-bezier(.16,1,.3,1);
+  }
+  .result-safe .gauge .bar{stroke:#00ff96;filter:drop-shadow(0 0 6px #00ff96)}
+  .result-danger .gauge .bar{stroke:#ff006e;filter:drop-shadow(0 0 6px #ff006e)}
+  .gauge .pct{
+    position:absolute;inset:0;display:grid;place-items:center;
+    font-family:'Orbitron',sans-serif;font-size:18px;font-weight:900;
+  }
+  .result-safe .gauge .pct{color:#00ff96}
+  .result-danger .gauge .pct{color:#ff006e}
+
+  .result-text{flex:1}
+  .result-tag{
+    font-family:'Orbitron',sans-serif;font-size:9px;letter-spacing:3px;
+    margin-bottom:6px;opacity:.7;
+  }
+  .result-title{
+    font-size:19px;font-weight:900;margin-bottom:6px;
+  }
+  .result-safe .result-title{color:#00ff96}
+  .result-danger .result-title{color:#ff006e}
+  .result-desc{font-size:12px;color:rgba(255,255,255,.65);line-height:1.8}
+
+  /* هشدار */
+  .disclaimer{
+    margin-top:22px;padding:12px 14px;
+    background:rgba(255,180,0,.06);
+    border-right:2px solid rgba(255,180,0,.6);
+    border-radius:3px;
+    font-size:11px;color:rgba(255,200,100,.85);line-height:1.7;
+  }
+
+  .footer{
+    text-align:center;margin-top:18px;
+    font-family:'Orbitron',sans-serif;
+    font-size:9px;letter-spacing:2px;
+    color:rgba(255,255,255,.25);
+  }
+
+  @media(max-width:520px){
+    .hud-header{padding:22px 20px 18px}
+    .hud-body{padding:22px 20px 26px}
+    h1{font-size:19px}
+    .logo{width:50px;height:50px;font-size:24px}
+    .result-inner{flex-direction:column;text-align:center;gap:14px}
+  }
+</style>
+</head>
+<body>
+
+<div class="grid-bg"></div>
+<div class="scanlines"></div>
+<canvas id="particles"></canvas>
+
+<div class="hud">
+  <div class="hud-header">
+    <div class="top-bar">
+      <div class="status-dot"><span></span> SYSTEM ONLINE</div>
+      <div class="version">v2.5.0</div>
+    </div>
+    <div class="logo-row">
+      <div class="logo">🧬</div>
+      <div>
+        <h1>NEURO<span class="accent">-DIAB</span></h1>
+        <div class="subtitle">پلتفرم تشخیص هوشمند دیابت</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="hud-body">
+    <div class="section-label"><p>اطلاعات ورودی</p></div>
+    <form id="form" novalidate>
+      <div class="field">
+        <div class="field-label">
+          <span class="name"><i></i> سطح گلوکز خون</span>
+          <span class="unit">MG/DL</span>
+        </div>
+        <div class="input-wrap">
+          <input type="number" id="glucose" step="0.1" placeholder="مثلاً 120">
+        </div>
+        <div class="field-hint" id="hint-glucose"></div>
+      </div>
+
+      <div class="field">
+        <div class="field-label">
+          <span class="name"><i></i> سن بیمار</span>
+          <span class="unit">YEARS</span>
+        </div>
+        <div class="input-wrap">
+          <input type="number" id="age" step="1" placeholder="مثلاً 35">
+        </div>
+        <div class="field-hint" id="hint-age"></div>
+      </div>
+
+      <div class="field">
+        <div class="field-label">
+          <span class="name"><i></i> شاخص توده بدنی</span>
+          <span class="unit">BMI KG/M²</span>
+        </div>
+        <div class="input-wrap">
+          <input type="number" id="bmi" step="0.1" placeholder="مثلاً 28.5">
+        </div>
+        <div class="field-hint" id="hint-bmi"></div>
+      </div>
+
+      <div class="field">
+        <div class="field-label">
+          <span class="name"><i></i> عملکرد شجره‌نامه دیابت</span>
+          <span class="unit">DPF</span>
+        </div>
+        <div class="input-wrap">
+          <input type="number" id="dpf" step="0.001" placeholder="مثلاً 0.5">
+        </div>
+        <div class="field-hint" id="hint-dpf"></div>
+      </div>
+
+      <button type="submit" class="btn-submit" id="btn">▶ اجرای تحلیل</button>
+    </form>
+
+    <div class="result" id="result">
+      <div class="result-inner">
+        <div class="gauge">
+          <svg width="90" height="90" viewBox="0 0 90 90">
+            <circle class="track" cx="45" cy="45" r="38" fill="none" stroke-width="6"/>
+            <circle class="bar" id="gaugeBar" cx="45" cy="45" r="38" fill="none" stroke-width="6"
+              stroke-dasharray="238.76" stroke-dashoffset="238.76"/>
+          </svg>
+          <div class="pct" id="gaugePct">0%</div>
+        </div>
+        <div class="result-text">
+          <div class="result-tag" id="resultTag"></div>
+          <div class="result-title" id="resultTitle"></div>
+          <div class="result-desc" id="resultDesc"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="disclaimer">
+      ⚠️ این ابزار صرفاً جهت اطلاع‌رسانی است و جایگزین تشخیص پزشک متخصص نیست.
+    </div>
+  </div>
+</div>
+
+<script>
+/* ===== ذرات مولکول گلوکز ===== */
+const canvas = document.getElementById('particles');
+const ctx = canvas.getContext('2d');
+let W, H, particles = [];
+
+function drawGlucose(p, time){
+  const { x, y, r, rot, rotSpeed } = p;
+  const angle = rot + time * rotSpeed;
+  const hexR = r * 4.5;
+  const atomR = r * 1.1;
+
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate(angle);
+
+  ctx.beginPath();
+  for (let i = 0; i < 6; i++){
+    const a = (Math.PI / 3) * i - Math.PI / 2;
+    const px = Math.cos(a) * hexR;
+    const py = Math.sin(a) * hexR;
+    i === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
+  }
+  ctx.closePath();
+  ctx.strokeStyle = 'rgba(0,240,255,0.35)';
+  ctx.lineWidth = 0.8;
+  ctx.shadowBlur = 6;
+  ctx.shadowColor = 'rgba(0,240,255,0.5)';
+  ctx.stroke();
+  ctx.shadowBlur = 0;
+
+  for (let i = 0; i < 6; i++){
+    const a = (Math.PI / 3) * i - Math.PI / 2;
+    const px = Math.cos(a) * hexR;
+    const py = Math.sin(a) * hexR;
+    ctx.beginPath();
+    ctx.arc(px, py, atomR, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(0,240,255,0.75)';
+    ctx.shadowBlur = 8;
+    ctx.shadowColor = '#00f0ff';
+    ctx.fill();
+    ctx.shadowBlur = 0;
+  }
+
+  for (let i = 0; i < 3; i++){
+    const a = (Math.PI / 3) * (i * 2) - Math.PI / 2;
+    const ox = Math.cos(a) * (hexR + r * 3);
+    const oy = Math.sin(a) * (hexR + r * 3);
+    const bx = Math.cos(a) * hexR;
+    const by = Math.sin(a) * hexR;
+
+    ctx.beginPath();
+    ctx.moveTo(bx, by);
+    ctx.lineTo(ox, oy);
+    ctx.strokeStyle = 'rgba(168,85,247,0.35)';
+    ctx.lineWidth = 0.7;
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.arc(ox, oy, atomR * 0.85, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(168,85,247,0.7)';
+    ctx.shadowBlur = 6;
+    ctx.shadowColor = '#a855f7';
+    ctx.fill();
+    ctx.shadowBlur = 0;
+  }
+
+  ctx.restore();
+}
+
+function resize(){
+  W = canvas.width = window.innerWidth;
+  H = canvas.height = window.innerHeight;
+  particles = Array.from({length: 22}, () => ({
+    x: Math.random() * W,
+    y: Math.random() * H,
+    vx: (Math.random() - .5) * .35,
+    vy: (Math.random() - .5) * .35,
+    r: Math.random() * 0.9 + 0.8,
+    rot: Math.random() * Math.PI * 2,
+    rotSpeed: (Math.random() - .5) * 0.004
+  }));
+}
+window.addEventListener('resize', resize);
+resize();
+
+function drawParticles(time){
+  ctx.clearRect(0, 0, W, H);
+  for (let i = 0; i < particles.length; i++){
+    for (let j = i + 1; j < particles.length; j++){
+      const p = particles[i], q = particles[j];
+      const d = Math.hypot(p.x - q.x, p.y - q.y);
+      if (d < 180){
+        ctx.beginPath();
+        ctx.moveTo(p.x, p.y);
+        ctx.lineTo(q.x, q.y);
+        ctx.strokeStyle = `rgba(0,240,255,${0.08 * (1 - d / 180)})`;
+        ctx.lineWidth = 0.5;
+        ctx.stroke();
+      }
+    }
+  }
+  particles.forEach(p => {
+    p.x += p.vx;
+    p.y += p.vy;
+    if (p.x < 0 || p.x > W) p.vx *= -1;
+    if (p.y < 0 || p.y > H) p.vy *= -1;
+    drawGlucose(p, time);
+  });
+  requestAnimationFrame(drawParticles);
+}
+requestAnimationFrame(drawParticles);
+
+/* ===== درخت تصمیم ===== */
+function predict(glucose, age, bmi, dpf){
+  if(glucose <= 154){
+    if(age <= 29) return 0;
+    if(bmi <= 26.700) return 0;
+    if(glucose <= 101) return dpf <= 0.709 ? 0 : 1;
+    if(bmi <= 43.300) return dpf <= 0.464 ? 0 : 1;
+    return 1;
+  } else {
+    if(dpf <= 0.307) return dpf <= 0.287 ? 1 : 0;
+    return 1;
+  }
+}
+
+/* ===== اعتبارسنجی زنده ===== */
+const RANGES = {
+  glucose: { min: 40, max: 400, unit: 'mg/dL' },
+  age:     { min: 1,  max: 120, unit: 'سال' },
+  bmi:     { min: 10, max: 60,  unit: 'kg/m²' },
+  dpf:     { min: 0,  max: 3,   unit: '' }
+};
+
+function validateField(id, value){
+  const r = RANGES[id];
+  const input = document.getElementById(id);
+  const hint = document.getElementById('hint-' + id);
+
+  input.classList.remove('input-error', 'input-valid');
+
+  if (isNaN(value)){
+    input.classList.add('input-error');
+    hint.innerHTML = '⚠️ لطفاً یک عدد معتبر وارد کنید';
+    hint.classList.add('show');
+    return false;
+  }
+  if (value < r.min || value > r.max){
+    input.classList.add('input-error');
+    hint.innerHTML = `⚠️ مقدار باید بین <b>${r.min}</b> تا <b>${r.max}</b> ${r.unit} باشد`;
+    hint.classList.add('show');
+    return false;
+  }
+  input.classList.add('input-valid');
+  hint.innerHTML = '<span class="ok">✓ معتبر</span>';
+  hint.classList.add('show');
+  return true;
+}
+
+function clearField(id){
+  const input = document.getElementById(id);
+  const hint = document.getElementById('hint-' + id);
+  input.classList.remove('input-error', 'input-valid');
+  hint.classList.remove('show');
+  hint.innerHTML = '';
+}
+
+['glucose','age','bmi','dpf'].forEach(id => {
+  const el = document.getElementById(id);
+  el.addEventListener('input', e => {
+    const raw = e.target.value.trim();
+    if (raw === ''){ clearField(id); return; }
+    validateField(id, parseFloat(raw));
+  });
+  el.addEventListener('blur', e => {
+    const raw = e.target.value.trim();
+    if (raw !== '') validateField(id, parseFloat(raw));
+  });
+});
+
+/* ===== ارسال فرم ===== */
+const form = document.getElementById('form');
+const result = document.getElementById('result');
+const btn = document.getElementById('btn');
+const gaugeBar = document.getElementById('gaugeBar');
+const gaugePct = document.getElementById('gaugePct');
+const CIRC = 2 * Math.PI * 38;
+
+form.addEventListener('submit', e => {
+  e.preventDefault();
+
+  const g = parseFloat(document.getElementById('glucose').value);
+  const a = parseFloat(document.getElementById('age').value);
+  const b = parseFloat(document.getElementById('bmi').value);
+  const d = parseFloat(document.getElementById('dpf').value);
+
+  const okG = validateField('glucose', g);
+  const okA = validateField('age', a);
+  const okB = validateField('bmi', b);
+  const okD = validateField('dpf', d);
+
+  if (!(okG && okA && okB && okD)){
+    btn.animate(
+      [
+        { transform: 'translateX(0)' },
+        { transform: 'translateX(-6px)' },
+        { transform: 'translateX(6px)' },
+        { transform: 'translateX(-4px)' },
+        { transform: 'translateX(4px)' },
+        { transform: 'translateX(0)' }
+      ],
+      { duration: 320, easing: 'ease-in-out' }
+    );
+    return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = '⏳ ANALYZING...';
+  result.className = 'result';
+
+  setTimeout(() => {
+    const pred = predict(g, a, b, d);
+    result.className = 'result show ' + (pred === 1 ? 'result-danger' : 'result-safe');
+
+    let pct, dash;
+    if (pred === 1){
+      pct = 88; dash = CIRC - (CIRC * pct / 100);
+      document.getElementById('resultTitle').textContent = 'ریسک بالای دیابت';
+      document.getElementById('resultDesc').innerHTML =
+        'الگوهای موجود در درخت تصمیم‌گیری نشان‌دهنده <b>احتمال بالای دیابت</b> است. لطفاً برای بررسی دقیق‌تر به پزشک مراجعه کنید.';
+    } else {
+      pct = 12; dash = CIRC - (CIRC * pct / 100);
+      document.getElementById('resultTitle').textContent = 'ریسک پایین دیابت';
+      document.getElementById('resultDesc').innerHTML =
+        'بر اساس تحلیل، الگوها نشان‌دهنده <b>ریسک پایین دیابت</b> است. سبک زندگی سالم و معاینات دوره‌ای را فراموش نکنید.';
+    }
+
+    gaugeBar.style.transition = 'none';
+    gaugeBar.style.strokeDashoffset = CIRC;
+    gaugePct.textContent = '0%';
+
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        gaugeBar.style.transition = 'stroke-dashoffset 1.2s cubic-bezier(.16,1,.3,1)';
+        gaugeBar.style.strokeDashoffset = dash;
+
+        const duration = 900;
+        const start = performance.now();
+        function tick(now){
+          const t = Math.min((now - start) / duration, 1);
+          const val = Math.round(pct * (1 - Math.pow(1 - t, 3)));
+          gaugePct.textContent = val + '%';
+          if (t < 1) requestAnimationFrame(tick);
+          else gaugePct.textContent = pct + '%';
+        }
+        requestAnimationFrame(tick);
+      });
+    });
+
+    btn.disabled = false;
+    btn.textContent = '▶ اجرای تحلیل';
+  }, 700);
+});
+</script>
+
+</body>
+</html>
